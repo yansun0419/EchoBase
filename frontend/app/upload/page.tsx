@@ -19,7 +19,7 @@ export default function UploadPage() {
     setError("");
 
     try {
-      const res = await fetch(`${process.env.BACKEND_URL}/api/documents`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/documents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, content }),

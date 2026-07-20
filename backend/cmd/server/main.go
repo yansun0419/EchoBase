@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"echobase/internal/db"
@@ -31,9 +32,11 @@ func main() {
 		log.Println("⚠️ 警告: 无法加载 .env 文件，确保环境变量已正确设置。")
 	}
 
-	// 1. 初始化数据库连接 (请确保密码是 lingxi2026)
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable TimeZone=Asia/Shanghai",
-		"localhost", "postgres", "lingxi2026", "echobase_db", 5432)
+	// 1. 从环境变量读取数据库连接字符串 (Supabase/Render 部署时自动注入 DATABASE_URL)
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		log.Fatal("❌ 致命错误: 未设置 DATABASE_URL 环境变量")
+	}
 	db.InitDB(dsn)
 
 	// add worker
@@ -42,10 +45,15 @@ func main() {
 	// 2. 初始化 Gin 引擎
 	r := gin.Default()
 
-	// 3. 配置 CORS 中间件：极其重要！否则浏览器插件会因为跨域策略被拒绝访问
+	// 3. 配置 CORS 中间件：通过环境变量控制允许的前端域名
+	allowedOrigin := os.Getenv("CORS_ORIGIN")
+	if allowedOrigin == "" {
+		allowedOrigin = "*" // 本地开发时默认允许所有
+	}
 	r.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
@@ -169,7 +177,11 @@ func main() {
 		})
 	})
 
-	// 5. 启动服务器
-	log.Println("⚡ API 网关已就绪，正在监听 :8080 端口...")
-	r.Run(":8080")
+	// 5. 启动服务器（Render 等云平台通过 PORT 环境变量注入端口）
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080" // 本地开发默认端口
+	}
+	log.Printf("⚡ API 网关已就绪，正在监听 :%s 端口...\n", port)
+	r.Run(":" + port)
 }

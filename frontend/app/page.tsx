@@ -31,7 +31,7 @@ export default function Home() {
     setData(null);
 
     try {
-      const res = await fetch(`${process.env.BACKEND_URL}/api/search`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/search`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query }),
