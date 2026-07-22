@@ -12,11 +12,20 @@ import (
 	"google.golang.org/api/option"
 )
 
+// getAPIKey 从环境变量获取 Gemini API Key，缺失时直接 fatal 退出
+func getAPIKey() string {
+	key := os.Getenv("GEMINI_API_KEY")
+	if key == "" {
+		panic("❌ 致命错误: 未设置 GEMINI_API_KEY 环境变量")
+	}
+	return key
+}
+
 // GenerateSummaryAndTags 调用 Gemini 生成摘要和标签
 func GenerateSummaryAndTags(contextData string) (summary string, tags string, err error) {
 	ctx := context.Background()
 	// 从环境变量中读取刚才配置的 Key
-	client, err := genai.NewClient(ctx, option.WithAPIKey(os.Getenv("GEMINI_API_KEY")))
+	client, err := genai.NewClient(ctx, option.WithAPIKey(getAPIKey()))
 	if err != nil {
 		return "", "", fmt.Errorf("创建 AI 客户端失败: %v", err)
 	}
@@ -65,7 +74,7 @@ func GenerateSummaryAndTags(contextData string) (summary string, tags string, er
 // GenerateEmbedding 调用 Gemini 专门的向量模型，生成 3072 维向量
 func GenerateEmbedding(content string) (*pgvector.Vector, error) {
 	ctx := context.Background()
-	client, err := genai.NewClient(ctx, option.WithAPIKey(os.Getenv("GEMINI_API_KEY")))
+	client, err := genai.NewClient(ctx, option.WithAPIKey(getAPIKey()))
 	if err != nil {
 		return nil, fmt.Errorf("创建 AI 客户端失败: %v", err)
 	}
@@ -90,7 +99,7 @@ func GenerateEmbedding(content string) (*pgvector.Vector, error) {
 // 找到文件末尾，加上这个 RAG 回答函数
 func GenerateRAGAnswer(query string, contextData string) (string, error) {
 	ctx := context.Background()
-	client, err := genai.NewClient(ctx, option.WithAPIKey(os.Getenv("GEMINI_API_KEY")))
+	client, err := genai.NewClient(ctx, option.WithAPIKey(getAPIKey()))
 	if err != nil {
 		return "", fmt.Errorf("创建客户端失败: %v", err)
 	}
