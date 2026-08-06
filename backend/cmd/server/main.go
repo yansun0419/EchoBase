@@ -46,6 +46,9 @@ func main() {
 	// add worker
 	tasks.StartWorker()
 
+	// v0.2 洗稿流水线 worker
+	tasks.StartCommitWorker()
+
 	// 2. 初始化 Gin 引擎
 	r := gin.Default()
 

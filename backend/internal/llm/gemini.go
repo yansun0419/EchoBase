@@ -71,6 +71,40 @@ func GenerateSummaryAndTags(contextData string) (summary string, tags string, er
 	return "", "", fmt.Errorf("AI 返回格式异常")
 }
 
+// WashContent 调用 Gemini 对原始内容进行统一风格洗稿、排版，输出纯净数据
+func WashContent(rawContent string) (string, error) {
+	ctx := context.Background()
+	client, err := genai.NewClient(ctx, option.WithAPIKey(getAPIKey()))
+	if err != nil {
+		return "", fmt.Errorf("创建 AI 客户端失败: %v", err)
+	}
+	defer client.Close()
+
+	model := client.GenerativeModel("gemini-3.1-flash-lite")
+
+	// 洗稿 Prompt：目标是把口水话原稿清洗成统一风格、逻辑清晰的纯净知识文本
+	prompt := fmt.Sprintf(`你是一个知识库内容的专业洗稿排版引擎。
+你的任务是将用户提交的【原始内容】清洗为统一风格、逻辑清晰、排版干净的纯文本数据。
+清洗规则：
+1. 去除口头禅、重复、无意义的口水话和噪声（例如"嗯"、"啊"、"就是"、"然后呢"之类的填充词）。
+2. 保留所有核心信息，绝对不允许丢失或篡改任何事实、数据、观点。
+3. 按照清晰合理的逻辑重新组织段落，使用 Markdown 标题、列表等排版元素让内容更有条理。
+4. 只输出清洗后的正文，不要输出任何解释、前缀或后缀。
+
+【原始内容】:
+%s`, rawContent)
+
+	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return "", fmt.Errorf("洗稿失败: %v", err)
+	}
+
+	if len(resp.Candidates) > 0 && len(resp.Candidates[0].Content.Parts) > 0 {
+		return strings.TrimSpace(fmt.Sprintf("%v", resp.Candidates[0].Content.Parts[0])), nil
+	}
+	return "", fmt.Errorf("AI 返回结果为空")
+}
+
 // GenerateEmbedding 调用 Gemini 专门的向量模型，生成 3072 维向量
 func GenerateEmbedding(content string) (*pgvector.Vector, error) {
 	ctx := context.Background()
