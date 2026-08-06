@@ -38,7 +38,11 @@ func InitDB(dsn string) {
 
 	log.Println("正在执行自动迁移...")
 
-	err = DB.AutoMigrate(&models.Document{})
+	err = DB.AutoMigrate(
+		&models.Document{},
+		&models.DataCommit{},
+		&models.SemanticChunk{},
+	)
 	if err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
