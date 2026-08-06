@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,6 +17,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"gorm.io/gorm"
 )
 
 // DocumentRequest 定义了前端传过来的 JSON 数据结构
@@ -96,6 +100,51 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{
 			"message":     "数据已成功接收并进入缓冲池等待 AI 处理",
 			"document_id": doc.ID,
+		})
+	})
+
+	// v0.2 去重闸门：数据摄入与洗稿总控表的物理大门
+	// 接收前端传来的原始文本 -> SHA-256 哈希 -> 写入 data_commits，UNIQUE 约束拦截重复
+	r.POST("/api/commits", func(c *gin.Context) {
+		var req struct {
+			RawContent string `json:"raw_content" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "数据格式错误，raw_content 不能为空: " + err.Error()})
+			return
+		}
+
+		// 1. 计算 SHA-256 哈希，作为内容去重指纹
+		sum := sha256.Sum256([]byte(req.RawContent))
+		inputHash := hex.EncodeToString(sum[:])
+
+		// 2. 写入 data_commits，Status 默认 'pending' 进入洗稿队列
+		commit := models.DataCommit{
+			RawContent: req.RawContent,
+			InputHash:  inputHash,
+		}
+		result := db.DB.Create(&commit)
+
+		// 3. 利用 UNIQUE 约束拦截重复提交
+		if errors.Is(result.Error, gorm.ErrDuplicatedKey) {
+			c.JSON(http.StatusConflict, gin.H{
+				"message":    "检测到重复内容，已在入口拦截",
+				"duplicated": true,
+				"input_hash": inputHash,
+			})
+			return
+		}
+		if result.Error != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "数据库写入失败: " + result.Error.Error()})
+			return
+		}
+
+		// 4. 通过闸门，进入洗稿流水线
+		c.JSON(http.StatusOK, gin.H{
+			"message":    "数据已通过去重闸门，进入洗稿流水线",
+			"commit_id":  commit.ID,
+			"input_hash": inputHash,
+			"status":     commit.Status,
 		})
 	})
 
