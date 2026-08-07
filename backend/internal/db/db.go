@@ -26,7 +26,12 @@ func InitDB(dsn string) {
 	)
 
 	var err error
-	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: newLogger})
+	// TranslateError: true 让 GORM 把数据库错误翻译成 gorm.ErrDuplicatedKey 等标准错误，
+	// 这样上层才能用 errors.Is 精确判断"唯一约束冲突"（去重闸门的核心依赖）
+	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger:         newLogger,
+		TranslateError: true,
+	})
 	if err != nil {
 		log.Fatalf("无法连接到数据库: %v", err)
 	}
