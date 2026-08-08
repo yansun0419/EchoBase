@@ -49,6 +49,10 @@ func main() {
 	// v0.2 洗稿流水线 worker
 	tasks.StartCommitWorker()
 
+	// v0.2 语义切片 worker + 细胞分裂 worker
+	tasks.StartSemanticWorker()
+	tasks.StartSplitWorker()
+
 	// 2. 初始化 Gin 引擎
 	r := gin.Default()
 

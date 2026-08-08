@@ -28,6 +28,10 @@ type DataCommit struct {
 	// Status 处理状态标记: pending -> washing -> completed / failed
 	Status string `gorm:"type:varchar(20);default:'pending'"`
 
+	// ChunkStatus 语义切片状态标记: pending -> done
+	// 与 Status 分离，因为洗稿完成(completed)后还需要经过语义切片阶段
+	ChunkStatus string `gorm:"type:varchar(20);default:'pending'"`
+
 	CreatedAt time.Time
 }
 
