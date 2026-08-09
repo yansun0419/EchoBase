@@ -98,6 +98,15 @@ const (
 	kindEmbed                       // 向量化（EmbedModelName）
 )
 
+// priority 区分在线用户请求与后台离线任务，是 QoS 资源隔离的核心维度。
+// 令牌发放高优绝对优先，低优被软配额限制，永远让出预留余量给高优。
+type priority int
+
+const (
+	prioLow  priority = iota // 后台离线任务（清洗/切片/合并/后台向量化）
+	prioHigh                 // 在线用户请求（提问/检索）
+)
+
 // ---------------------------------------------------------------------------
 // 执行器门面（Gateway）
 //
@@ -108,27 +117,29 @@ const (
 
 // Execute 是 LLM API 的统一调用入口（Request Hub 的门面）。
 //
-// 所有新增的模型方法只需两步即可接入限流体系：
+// 所有新增的模型方法只需三步即可接入限流体系：
 //  1. 声明请求类型 kind（kindGenerate 文本 / kindEmbed 向量，决定走哪个令牌桶）；
-//  2. 写一个闭包，用传入的共享 client 发请求、解析结果。
+//  2. 声明请求优先级 p（prioHigh 在线提问 / prioLow 后台任务，决定排队次序与配额）；
+//  3. 写一个闭包，用传入的共享 client 发请求、解析结果。
 //
-// 内部自动完成：令牌桶排队（自动选择发送时机）→ 真实请求 →
-// 每日配额计数 → 429 退避重试 + 熔断广播。调用方零样板。
+// 内部自动完成：令牌桶排队（高优优先，低优受软配额约束）→ 真实请求 →
+// 每日配额计数（高/低独立账本 + 共享物理熔断）→ 429 退避重试 + 熔断广播。
+// 调用方零样板。
 //
 // 注意：一个 Execute 调用对应一次 API 请求（消耗 1 令牌 + 1 每日计数）；
 // 批量场景（如多个 batch 的向量化）请在循环里逐个调用 Execute。
-func Execute[T any](kind requestKind, fn func(client *genai.Client, ctx context.Context) (T, error)) (T, error) {
+func Execute[T any](kind requestKind, p priority, fn func(client *genai.Client, ctx context.Context) (T, error)) (T, error) {
 	h := getHub()
 	return withRetry(func() (T, error) {
 		var zero T
-		if err := h.acquire(context.Background(), kind); err != nil {
+		if err := h.acquire(context.Background(), kind, p); err != nil {
 			return zero, err
 		}
 		res, err := fn(h.client, context.Background())
 		if err != nil {
 			return zero, err
 		}
-		h.noteUsage(kind, 1)
+		h.noteUsage(kind, p, 1)
 		return res, nil
 	})
 }

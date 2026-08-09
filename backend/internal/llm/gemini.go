@@ -22,7 +22,7 @@ func GenerateSummaryAndTags(contextData string) (summary string, tags string, er
 		summary string
 		tags    string
 	}
-	res, err := Execute(kindGenerate, func(client *genai.Client, ctx context.Context) (result, error) {
+	res, err := Execute(kindGenerate, prioLow, func(client *genai.Client, ctx context.Context) (result, error) {
 		var r result
 		model := client.GenerativeModel(TextModelName)
 		// 构造极其严格的 Prompt（提示词工程）
@@ -68,7 +68,7 @@ func GenerateSummaryAndTags(contextData string) (summary string, tags string, er
 // SemanticSplit 用 AI 把长文本切成语义自洽的知识区块（Agentic Chunking）
 // 每个区块都会自然融入整篇文章的核心主旨，拿出来就能独立存活
 func SemanticSplit(content string) ([]string, error) {
-	return Execute(kindGenerate, func(client *genai.Client, ctx context.Context) ([]string, error) {
+	return Execute(kindGenerate, prioLow, func(client *genai.Client, ctx context.Context) ([]string, error) {
 		model := client.GenerativeModel(TextModelName)
 
 		// 强制返回结构化 JSON，避免 AI 吐出乱七八糟的格式导致解析崩溃
@@ -128,7 +128,7 @@ func GenerateEmbeddingsBatch(texts []string) ([][]float32, error) {
 		}
 		batchTexts := texts[start:end]
 
-		batchVecs, err := Execute(kindEmbed, func(client *genai.Client, ctx context.Context) ([][]float32, error) {
+		batchVecs, err := Execute(kindEmbed, prioLow, func(client *genai.Client, ctx context.Context) ([][]float32, error) {
 			em := client.EmbeddingModel(EmbedModelName)
 			batch := em.NewBatch()
 			for _, t := range batchTexts {
@@ -156,7 +156,7 @@ func GenerateEmbeddingsBatch(texts []string) ([][]float32, error) {
 // 安全约束：AI 只被允许生成"前置背景句"，绝不能改写/重写区块本体——
 // 返回的文本会由调用方拼接到区块开头，原始区块内容 100% 保留，杜绝 AI 压缩丢内容。
 func Contextualize(chunk string, fullContent string) (string, error) {
-	return Execute(kindGenerate, func(client *genai.Client, ctx context.Context) (string, error) {
+	return Execute(kindGenerate, prioLow, func(client *genai.Client, ctx context.Context) (string, error) {
 		model := client.GenerativeModel(TextModelName)
 
 		prompt := fmt.Sprintf(`你是一个上下文补齐助手。给定一篇完整文章，以及从中截取的一个区块。
@@ -188,7 +188,7 @@ func Contextualize(chunk string, fullContent string) (string, error) {
 
 // WashContent 调用 Gemini 对原始内容进行统一风格洗稿、排版，输出纯净数据
 func WashContent(rawContent string) (string, error) {
-	return Execute(kindGenerate, func(client *genai.Client, ctx context.Context) (string, error) {
+	return Execute(kindGenerate, prioLow, func(client *genai.Client, ctx context.Context) (string, error) {
 		model := client.GenerativeModel(TextModelName)
 
 		// 洗稿 Prompt：目标是把口水话原稿清洗成统一风格、逻辑清晰的纯净知识文本
@@ -215,9 +215,21 @@ func WashContent(rawContent string) (string, error) {
 	})
 }
 
-// GenerateEmbedding 调用 Gemini 专门的向量模型，生成 3072 维向量
+// GenerateEmbedding 调用 Gemini 专门的向量模型，生成 3072 维向量。
+// 供后台流水线使用（文档向量化等），按低优先级排队。
 func GenerateEmbedding(content string) (*pgvector.Vector, error) {
-	return Execute(kindEmbed, func(client *genai.Client, ctx context.Context) (*pgvector.Vector, error) {
+	return generateEmbedding(prioLow, content)
+}
+
+// GenerateQueryEmbedding 与 GenerateEmbedding 等价，但按在线请求（高优先级）
+// 排队，供用户提问的检索路径（/api/search）使用，
+// 保证用户 query 向量化不被后台批量向量化堵住。
+func GenerateQueryEmbedding(content string) (*pgvector.Vector, error) {
+	return generateEmbedding(prioHigh, content)
+}
+
+func generateEmbedding(p priority, content string) (*pgvector.Vector, error) {
+	return Execute(kindEmbed, p, func(client *genai.Client, ctx context.Context) (*pgvector.Vector, error) {
 		// 选用最新的文本向量模型
 		em := client.EmbeddingModel(EmbedModelName)
 		res, err := em.EmbedContent(ctx, genai.Text(content))
@@ -237,7 +249,7 @@ func GenerateEmbedding(content string) (*pgvector.Vector, error) {
 
 // GenerateRAGAnswer 基于检索到的上下文生成 RAG 回答
 func GenerateRAGAnswer(query string, contextData string) (string, error) {
-	return Execute(kindGenerate, func(client *genai.Client, ctx context.Context) (string, error) {
+	return Execute(kindGenerate, prioHigh, func(client *genai.Client, ctx context.Context) (string, error) {
 		model := client.GenerativeModel(TextModelName)
 
 		// 这是 RAG 系统最核心的 Prompt 工程，强制 AI 必须且只能基于给定的知识库资料作答
@@ -276,7 +288,7 @@ type MergeDecision struct {
 // newContent: 用户刚刚提交的新碎片
 // existingContent: 数据库中检索到的最相似的老文章
 func EvaluateAndMerge(newContent string, existingContent string) (*MergeDecision, error) {
-	return Execute(kindGenerate, func(client *genai.Client, ctx context.Context) (*MergeDecision, error) {
+	return Execute(kindGenerate, prioLow, func(client *genai.Client, ctx context.Context) (*MergeDecision, error) {
 		model := client.GenerativeModel(TextModelName)
 
 		// 强制要求大模型返回 JSON

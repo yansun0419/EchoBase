@@ -25,11 +25,20 @@ const (
 // ---------------------------------------------------------------------------
 
 const (
-	// TextModelRPM 文本生成每分钟请求上限
+	// TextModelRPM 文本生成每分钟请求上限（物理总量，高低优先级共享）
 	TextModelRPM = 15
 
-	// TextModelRPD 文本生成每日请求上限
+	// TextModelRPD 文本生成每日请求上限（物理总量，高低优先级共享）
 	TextModelRPD = 500
+
+	// TextModelRPMReserved 文本生成每分钟为在线高优先级请求预留的余量。
+	// 低优先级（后台清洗/切片/合并）可用量由程序自动算出：总量 − 预留。
+	// 保证用户提问到达时，无论后台多么繁忙，每分钟至少能抢到该余量。
+	TextModelRPMReserved = 5
+
+	// TextModelRPDReserved 文本生成每天为在线高优先级请求预留的余量。
+	// 低优先级每日软上限 = TextModelRPD − 预留，到点立即熔断，当日剩余全部让给高优。
+	TextModelRPDReserved = 100
 )
 
 // ---------------------------------------------------------------------------
@@ -37,11 +46,17 @@ const (
 // ---------------------------------------------------------------------------
 
 const (
-	// EmbedModelRPM 向量化每分钟请求上限
+	// EmbedModelRPM 向量化每分钟请求上限（物理总量，高低优先级共享）
 	EmbedModelRPM = 100
 
-	// EmbedModelRPD 向量化每日请求上限
+	// EmbedModelRPD 向量化每日请求上限（物理总量，高低优先级共享）
 	EmbedModelRPD = 1000
+
+	// EmbedModelRPMReserved 向量化每分钟为在线高优先级请求预留的余量
+	EmbedModelRPMReserved = 5
+
+	// EmbedModelRPDReserved 向量化每天为在线高优先级请求预留的余量
+	EmbedModelRPDReserved = 100
 )
 
 // ---------------------------------------------------------------------------

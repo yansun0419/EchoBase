@@ -175,7 +175,8 @@ func main() {
 		}
 
 		// 2. 唤醒 Embedding 2 模型，将提问转化为 3072 维向量
-		queryVector, err := llm.GenerateEmbedding(req.Query)
+		//    （在线请求按高优先级排队，不被后台批量向量化堵住）
+		queryVector, err := llm.GenerateQueryEmbedding(req.Query)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "搜索词向量化失败: " + err.Error()})
 			return
