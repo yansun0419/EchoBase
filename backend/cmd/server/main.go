@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"echobase/internal/config"
 	"echobase/internal/db"
 	"echobase/internal/llm"
 	"echobase/internal/models"
@@ -42,6 +43,10 @@ func main() {
 		log.Fatal("❌ 致命错误: 未设置 DATABASE_URL 环境变量")
 	}
 	db.InitDB(dsn)
+
+	// 将 Gemini 每日配额持久化到数据库（而非本地文件）。
+	// Render 等云平台容器文件系统易失，重启后本地 JSON 计数会丢失导致限流失效。
+	llm.InitUsageStore(db.DB)
 
 	// add worker
 	tasks.StartWorker()
@@ -201,7 +206,7 @@ func main() {
 
 		// 4. 【新增】RAG 增强生成阶段！
 		// 如果搜不到任何内容，直接婉拒
-		if len(results) == 0 || results[0].Similarity < 0.45 {
+		if len(results) == 0 || results[0].Similarity < config.MinSearchSimilarity {
 			c.JSON(http.StatusOK, gin.H{
 				"query":   req.Query,
 				"answer":  "抱歉，在您的知识库中没有找到与此问题强相关的内容哦。",
@@ -213,7 +218,7 @@ func main() {
 		// 把搜到的相关文章内容拼接到一起，作为 AI 的“参考资料”
 		var contextContext strings.Builder
 		for i, res := range results {
-			if res.Similarity > 0.45 { // 过滤掉相关性极低的噪声
+			if res.Similarity > config.MinSearchSimilarity { // 过滤掉相关性极低的噪声
 				contextContext.WriteString(fmt.Sprintf("参考资料 %d: [%s]\n%s\n\n", i+1, res.Title, res.Content))
 			}
 		}

@@ -47,6 +47,7 @@ func InitDB(dsn string) {
 		&models.Document{},
 		&models.DataCommit{},
 		&models.SemanticChunk{},
+		&models.APIQuota{},
 	)
 	if err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
